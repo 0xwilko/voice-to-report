@@ -1,25 +1,90 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#103c6e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Voice to Report"><link rel="manifest" href="manifest.webmanifest"><title>Voice to Report</title><style>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#103c6e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Voice to Report"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="apple-touch-icon.png"><title>Voice to Report</title><style>
 :root{--n:#103c6e;--b:#0f7ae5;--t:#10233c;--m:#607086;--bd:#d9e2ec}*{box-sizing:border-box}body{margin:0;background:#eef3f8;color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.w{max-width:900px;margin:auto;padding:16px}header{background:linear-gradient(135deg,#103c6e,#1a528e);color:#fff;padding:24px;border-radius:22px}h1{margin:0;font-size:40px}header p{margin:7px 0 0;color:#eaf2fb}.card{background:#fff;border:1px solid var(--bd);border-radius:18px;padding:18px;margin-top:14px;box-shadow:0 7px 22px #103c6e15}label{display:block;font-weight:700;margin:10px 0 6px}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;padding:12px;border:1px solid #bdcad8;border-radius:12px}textarea{min-height:300px;line-height:1.5}.mic{text-align:center}.mic button{width:160px;height:160px;border:0;border-radius:50%;font-size:58px;background:var(--b);color:white}.row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}button.a{border:0;border-radius:12px;padding:13px;font-weight:700;background:#eaf2fb;color:#123a67}button.p{background:var(--b);color:#fff}#stop{background:#d32f2f;color:#fff;width:auto;height:auto;min-width:160px;padding:14px 28px;font-size:20px;border-radius:12px}#stop:disabled{background:#f3f5f8;color:#8a98aa;opacity:1}.muted{color:var(--m);font-size:14px;line-height:1.45}.ok{background:#eef8f3;padding:12px;border-radius:12px;color:#155b3f}.wc{float:right;color:var(--m);font-size:14px}.formatting{color:#0f7ae5;font-weight:700}.readymsg{color:#0a7a4a;font-weight:700}@media(min-width:720px){.top{display:grid;grid-template-columns:1fr 1fr;gap:14px}.top .card{height:calc(100% - 14px)}.row{grid-template-columns:repeat(4,1fr)}}@media print{header,.setup,.mic,.privacy,.buttons{display:none}.card{border:0;box-shadow:none}textarea{border:0}}
-</style></head><body><div class="w"><header><h1>Voice to Report</h1><p>Speak naturally. Turn your words into a clear, formatted report or document.</p></header><div class="top"><section class="card setup"><h2>Set up your report</h2><label>Document type</label><select id="type"><option>General Report</option><option>Meeting Notes</option><option>Letter</option><option>Statement</option><option>Action List</option><option>Site Visit Report</option></select><label>Report title (optional)</label><input id="title" placeholder="e.g. Site Visit Report"><label>Your email address (optional)</label><input id="email" type="email" inputmode="email" placeholder="name@example.com"><label style="font-weight:400"><input id="remember" type="checkbox" style="width:auto"> Remember my email address on this device</label></section><section class="card mic"><h2>Speak</h2><button id="mic">🎙️</button><p id="status"><b>Ready</b></p><p id="support" class="muted"></p><button id="stop" class="a" disabled>Stop</button></section></div><section class="card privacy"><div class="ok"><b>Privacy:</b> Voice to Report does not store your reports on a server and does not require an account. Your optional email address is stored only on this device if you choose “Remember”.</div><p class="muted">Speech recognition is supplied by your browser/device and may use its speech-processing service.</p></section><section class="card"><h2>Your Report <span id="wc" class="wc">0 words</span></h2><textarea id="report" placeholder="Your words will appear here. You can also type or edit manually."></textarea><div class="row buttons"><button id="new" class="a">New Report</button><button id="copy" class="a">Copy</button><button id="save" class="a">Save .TXT</button><button id="share" class="a p">Share</button><button id="emailBtn" class="a p">Email Report</button><button id="print" class="a">Print / PDF</button><button id="original" class="a" style="display:none">Show Original</button></div></section></div><script>
-const $=x=>document.getElementById(x),r=$('report');let rec=null,on=false,base='',rawBeforeAI='',formatting=false;function wc(){let t=r.value.trim();$('wc').textContent=(t?t.split(/\s+/).length:0)+' words'}r.oninput=wc;let se=localStorage.getItem('vtr_email');if(se){$('email').value=se;$('remember').checked=true}$('remember').onchange=()=>{$('remember').checked?localStorage.setItem('vtr_email',$('email').value.trim()):localStorage.removeItem('vtr_email')};$('email').oninput=()=>{if($('remember').checked)localStorage.setItem('vtr_email',$('email').value.trim())};
+#printout{display:none;white-space:pre-wrap;font-family:Arial,sans-serif;font-size:12pt;line-height:1.45}#printout h1{font-size:16pt;margin:0 0 12px}@media print{body{background:#fff}.w>*{display:none!important}#printout{display:block!important}}
+</style></head><body><div class="w"><header><h1>Voice to Report</h1><p>Speak naturally. Turn your words into a clear, formatted report or document.</p></header><div class="top"><section class="card setup"><h2>Set up your report</h2><label for="type">Document type</label><select id="type"><option>General Report</option><option>Meeting Notes</option><option>Letter</option><option>Statement</option><option>Action List</option><option>Site Visit Report</option></select><label for="title">Report title (optional)</label><input id="title" placeholder="e.g. Site Visit Report"><label for="email">Your email address (optional)</label><input id="email" type="email" inputmode="email" placeholder="name@example.com"><label style="font-weight:400"><input id="remember" type="checkbox" style="width:auto"> Remember my email address on this device</label></section><section class="card mic"><h2>Speak</h2><button id="mic" aria-label="Start dictation">🎙️</button><p id="status"><b>Ready</b></p><p id="support" class="muted"></p><button id="stop" class="a" disabled>Stop</button></section></div><section class="card privacy"><div class="ok"><b>Privacy:</b> Voice to Report does not keep your reports and does not need an account. When you press Stop, the text of your report is sent securely to the app's server and to OpenAI to be tidied up, then returned to you. It is not saved by this app. Your email address is only stored on this device if you tick “Remember”.</div><p class="muted">Speech recognition is supplied by your browser/device and may use its own speech-processing service.</p></section><section class="card"><h2>Your Report <span id="wc" class="wc">0 words</span></h2><textarea id="report" placeholder="Your words will appear here. You can also type or edit manually."></textarea><div class="row buttons"><button id="new" class="a">New Report</button><button id="copy" class="a">Copy</button><button id="save" class="a">Save .TXT</button><button id="share" class="a p">Share</button><button id="emailBtn" class="a p">Email Report</button><button id="print" class="a">Print / PDF</button><button id="formatBtn" class="a">Format Again</button><button id="original" class="a" style="display:none">Show Original</button></div></section></div><div id="printout"></div><script>
+const $=x=>document.getElementById(x),r=$('report');
+let rec=null,on=false,base='',rawBeforeAI='',formatting=false,userStopped=false,restarts=0;
+function wc(){const t=r.value.trim();$('wc').textContent=(t?t.split(/\s+/).length:0)+' words'}
+r.oninput=wc;
+function store(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}
+function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+const se=load('vtr_email');if(se){$('email').value=se;$('remember').checked=true}
+$('remember').onchange=()=>store('vtr_email',$('remember').checked?$('email').value.trim():'');
+$('email').oninput=()=>{if($('remember').checked)store('vtr_email',$('email').value.trim())};
+function setStatus(h){$('status').innerHTML=h}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function callFormat(raw,code){
+  return fetch('./api/format',{method:'POST',headers:{'Content-Type':'application/json','X-Access-Code':code||''},body:JSON.stringify({text:raw,documentType:$('type').value,title:$('title').value.trim()})});
+}
 async function autoFormat(){
   const raw=r.value.trim();
   if(!raw||formatting)return;
-  formatting=true; rawBeforeAI=raw;
-  $('status').dataset.err='0';
-  $('status').innerHTML='<span class="formatting">Formatting your report…</span>';
+  formatting=true;
+  setStatus('<span class="formatting">Formatting your report…</span>');
   try{
-    const res=await fetch('./api/format',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:raw,documentType:$('type').value,title:$('title').value.trim()})});
-    if(!res.ok) throw new Error('format service unavailable');
-    const data=await res.json();
-    if(!data.report||typeof data.report!=='string') throw new Error('invalid response');
-    r.value=data.report.trim(); base=r.value+' '; wc();
-    $('original').style.display='inline-block';
-    $('status').innerHTML='<span class="readymsg">Report ready</span>';
+    let code=load('vtr_code')||'';
+    let res=await callFormat(raw,code);
+    if(res.status===401){
+      code=(prompt('Enter the Voice to Report access code:')||'').trim();
+      if(!code)throw new Error('no code');
+      res=await callFormat(raw,code);
+      if(res.status===401){store('vtr_code','');throw new Error('bad code')}
+      store('vtr_code',code);
+    }
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.error||'service unavailable');
+    if(!data.report||typeof data.report!=='string')throw new Error('invalid response');
+    rawBeforeAI=raw;
+    r.value=data.report.trim();base=r.value+' ';wc();
+    $('original').textContent='Show Original';$('original').style.display='inline-block';
+    setStatus('<span class="readymsg">Report ready</span>');
   }catch(e){
-    $('status').innerHTML='<b>Report captured.</b><br><span class="muted">Automatic formatting is not connected yet, so your original wording has been kept.</span>';
+    const m=e.message==='bad code'?'Access code not recognised.':e.message==='no code'?'No access code entered.':esc(String(e.message||'Formatting unavailable'));
+    setStatus('<b>Report captured.</b><br><span class="muted">'+m+' Your original wording has been kept. Tap Format Again to retry.</span>');
   }finally{formatting=false}
 }
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(SR){rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-GB';$('support').textContent='Speech recognition available.';rec.onstart=()=>{on=true;$('status').innerHTML='<b>Listening…</b>';$('mic').disabled=true;$('stop').disabled=false};rec.onend=()=>{on=false;$('mic').disabled=false;$('stop').disabled=true;if($('status').dataset.err!=='1'){autoFormat()}else{$('status').dataset.err='0'}};rec.onerror=e=>{on=false;$('mic').disabled=false;$('stop').disabled=true;$('status').dataset.err='1';if(e.error==='not-allowed'||e.error==='service-not-allowed'){$('status').innerHTML='<b>Speech access is off</b><br><span class="muted">Allow Speech Recognition for Safari, then tap the microphone again.</span>'}else if(e.error==='no-speech'){$('status').innerHTML='<b>I didn’t hear anything.</b><br><span class="muted">Tap the microphone and try again.</span>'}else if(e.error==='network'){$('status').innerHTML='<b>Speech service unavailable.</b><br><span class="muted">Check your connection and try again.</span>'}else{$('status').innerHTML='<b>Speech recognition stopped.</b><br><span class="muted">Please tap the microphone and try again.</span>'}};rec.onresult=e=>{let f='',i='';for(let n=e.resultIndex;n<e.results.length;n++){let t=e.results[n][0].transcript;e.results[n].isFinal?f+=t+' ':i+=t}if(f)base+=f;r.value=(base+i).trimStart();wc()}}else{$('mic').disabled=true;$('support').innerHTML='<b>Browser speech recognition is unavailable here.</b> Tap inside Your Report and use the iPhone keyboard microphone instead.'}
-$('mic').onclick=()=>{$('status').dataset.err='0';base=r.value?r.value.trim()+' ':'';try{rec.start()}catch(e){$('status').innerHTML='<b>Unable to start speech recognition.</b><br><span class="muted">Please tap the microphone and try again.</span>'}};$('stop').onclick=()=>{if(rec&&on)rec.stop()};$('new').onclick=()=>{if(r.value&&!confirm('Clear this report and start a new one?'))return;r.value='';base='';rawBeforeAI='';$('original').style.display='none';$('title').value='';wc()};$('copy').onclick=async()=>{await navigator.clipboard.writeText(r.value);alert('Report copied')};function text(){return ($('title').value.trim()||$('type').value)+'\n\n'+r.value.trim()}function name(){return ($('title').value.trim()||$('type').value).replace(/[^a-z0-9]+/gi,'-')||'Voice-to-Report'}$('save').onclick=()=>{let b=new Blob([text()],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name()+'.txt';a.click()};$('share').onclick=async()=>{if(navigator.share)try{await navigator.share({title:$('title').value||$('type').value,text:text()})}catch(e){}else{await navigator.clipboard.writeText(text());alert('Report copied for sharing')}};$('emailBtn').onclick=()=>{let to=$('email').value.trim();location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent($('title').value||$('type').value)+'&body='+encodeURIComponent(text())};$('original').onclick=()=>{if(!rawBeforeAI)return;const current=r.value;r.value=rawBeforeAI;rawBeforeAI=current;base=r.value+' ';wc();$('original').textContent=$('original').textContent==='Show Original'?'Show Formatted':'Show Original'};$('print').onclick=()=>window.print();if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js').catch(()=>{}));wc();
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){
+  rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-GB';
+  $('support').textContent='Speech recognition available.';
+  rec.onstart=()=>{on=true;setStatus('<b>Listening…</b> Press Stop when finished.');$('mic').disabled=true;$('stop').disabled=false};
+  rec.onend=()=>{
+    on=false;
+    if($('status').dataset.err==='1'){$('status').dataset.err='0';$('mic').disabled=false;$('stop').disabled=true;return}
+    if(!userStopped&&restarts<30){
+      // Safari ends recognition on pauses; carry on listening until Stop is pressed.
+      restarts++;base=r.value.trim()?r.value.trim()+' ':'';
+      try{rec.start();return}catch(e){}
+    }
+    $('mic').disabled=false;$('stop').disabled=true;
+    autoFormat();
+  };
+  rec.onerror=e=>{
+    if(e.error==='no-speech'&&!userStopped)return; // pause, onend will restart
+    if(e.error==='aborted'&&userStopped)return;
+    on=false;$('mic').disabled=false;$('stop').disabled=true;$('status').dataset.err='1';userStopped=true;
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){setStatus('<b>Speech access is off</b><br><span class="muted">Allow Speech Recognition for Safari, then tap the microphone again.</span>')}
+    else if(e.error==='network'){setStatus('<b>Speech service unavailable.</b><br><span class="muted">Check your connection and try again.</span>')}
+    else{setStatus('<b>Speech recognition stopped.</b><br><span class="muted">Please tap the microphone and try again.</span>')}
+  };
+  rec.onresult=e=>{let f='',i='';for(let n=e.resultIndex;n<e.results.length;n++){const t=e.results[n][0].transcript;e.results[n].isFinal?f+=t+' ':i+=t}if(f)base+=f;r.value=(base+i).trimStart();wc()};
+}else{
+  $('mic').disabled=true;
+  $('support').innerHTML='<b>Browser speech recognition is unavailable here.</b> Tap inside Your Report and use the keyboard microphone instead, then tap Format Again.';
+}
+$('mic').onclick=()=>{if(!rec)return;$('status').dataset.err='0';userStopped=false;restarts=0;base=r.value.trim()?r.value.trim()+' ':'';try{rec.start()}catch(e){setStatus('<b>Unable to start speech recognition.</b><br><span class="muted">Please tap the microphone and try again.</span>')}};
+$('stop').onclick=()=>{userStopped=true;if(rec&&on)rec.stop();else{$('mic').disabled=false;$('stop').disabled=true;autoFormat()}};
+$('formatBtn').onclick=()=>{if(on)return;autoFormat()};
+$('new').onclick=()=>{if(r.value&&!confirm('Clear this report and start a new one?'))return;r.value='';base='';rawBeforeAI='';$('original').style.display='none';$('title').value='';setStatus('<b>Ready</b>');wc()};
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(r.value);alert('Report copied')}catch(e){r.select();document.execCommand('copy')}};
+function heading(){return $('title').value.trim()||$('type').value}
+function text(){return heading()+'\n\n'+r.value.trim()}
+function name(){return heading().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'Voice-to-Report'}
+$('save').onclick=()=>{const b=new Blob([text()],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name()+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+$('share').onclick=async()=>{if(navigator.share){try{await navigator.share({title:heading(),text:text()})}catch(e){}}else{try{await navigator.clipboard.writeText(text());alert('Report copied for sharing')}catch(e){}}};
+$('emailBtn').onclick=()=>{const to=$('email').value.trim();location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(heading())+'&body='+encodeURIComponent(r.value.trim())};
+$('original').onclick=()=>{if(!rawBeforeAI)return;const current=r.value;r.value=rawBeforeAI;rawBeforeAI=current;base=r.value+' ';wc();$('original').textContent=$('original').textContent==='Show Original'?'Show Formatted':'Show Original'};
+$('print').onclick=()=>{const p=$('printout');p.innerHTML='<h1>'+esc(heading())+'</h1>'+esc(r.value.trim());window.print()};
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js').catch(()=>{}));
+wc();
 </script></body></html>
