@@ -5,12 +5,14 @@
 // Optional:
 //   OPENAI_MODEL     - model name (default below)
 //   OPENAI_EFFORT    - reasoning effort (default "low")
+//   KV_REST_API_URL, KV_REST_API_TOKEN - Upstash Redis (added by the Vercel integration)
 
 const DEFAULT_MODEL = 'gpt-5.5';
 const MAX_CHARS = 12000;
 
 // Best-effort rate limit. Serverless instances do not share memory,
 // so this limits bursts per instance, not a hard global cap.
+// Used as a fallback if Upstash is unreachable.
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_PER_WINDOW = 20;
 const hits = new Map();
@@ -23,6 +25,55 @@ function rateLimited(ip) {
   hits.set(ip, list);
   if (hits.size > 5000) hits.clear();
   return false;
+}
+
+// Shared rate limit via Upstash Redis (applies across all instances).
+// Env vars added automatically by the Vercel Upstash integration:
+//   KV_REST_API_URL, KV_REST_API_TOKEN
+// Falls back to the in-memory limit above if Upstash is unreachable.
+const WINDOW_SEC = 600;          // 10 minutes
+const DAILY_CAP = 100;           // total reports per day (UTC), all users
+
+async function redisPipeline(cmds) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) throw new Error('Redis not configured');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const r = await fetch(url.replace(/\/$/, '') + '/pipeline', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmds)
+    });
+    if (!r.ok) throw new Error('Redis HTTP ' + r.status);
+    const data = await r.json();
+    if (!Array.isArray(data) || data.some(d => !d || d.error)) throw new Error('Redis command error');
+    return data.map(d => d.result);
+  } finally { clearTimeout(timer); }
+}
+
+async function checkLimits(ip) {
+  const day = new Date().toISOString().slice(0, 10);
+  const ipKey = 'v2r:ip:' + ip;
+  const dayKey = 'v2r:day:' + day;
+  try {
+    const results = await redisPipeline([
+      ['SET', ipKey, '0', 'EX', String(WINDOW_SEC), 'NX'],
+      ['INCR', ipKey],
+      ['SET', dayKey, '0', 'EX', '172800', 'NX'],
+      ['INCR', dayKey]
+    ]);
+    const ipCount = Number(results[1]);
+    const dayCount = Number(results[3]);
+    if (dayCount > DAILY_CAP) return 'Daily limit reached. Try again tomorrow.';
+    if (ipCount > MAX_PER_WINDOW) return 'Too many requests. Try again shortly.';
+    return null;
+  } catch (e) {
+    console.error('Rate limit store unavailable', e && e.message);
+    return rateLimited(ip) ? 'Too many requests. Try again shortly.' : null;
+  }
 }
 
 function safeEqual(a, b) {
@@ -45,7 +96,8 @@ export default async function handler(req, res) {
   }
 
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (rateLimited(ip)) return res.status(429).json({ error: 'Too many requests. Try again shortly.' });
+  const limitMsg = await checkLimits(ip);
+  if (limitMsg) return res.status(429).json({ error: limitMsg });
 
   try {
     const { text, documentType, title } = req.body || {};
