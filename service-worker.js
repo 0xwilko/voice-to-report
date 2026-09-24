@@ -1,5 +1,5 @@
 // Voice to Report service worker - bump VERSION whenever app files change.
-const VERSION = 'vtr-v3';
+const VERSION = 'vtr-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
