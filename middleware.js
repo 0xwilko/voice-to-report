@@ -4,7 +4,7 @@ import { verifyToken, getCookie, COOKIE_NAME } from './lib/session.js';
 
 export const config = {
   // Everything except the sign-in page, sign-in/out endpoints and harmless app assets.
-  matcher: ['/((?!login\\.html|api/login|api/logout|icon\\.svg|apple-touch-icon\\.png|manifest\\.webmanifest|service-worker\\.js|favicon\\.ico).*)']
+  matcher: ['/((?!login\\.html|api/login|api/logout|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png|manifest\\.webmanifest|service-worker\\.js|favicon\\.ico).*)']
 };
 
 export default async function middleware(request) {
