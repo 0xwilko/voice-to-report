@@ -1,11 +1,12 @@
 // Voice to Report - AI formatting endpoint (Vercel serverless function)
 // Required environment variables (Vercel > Settings > Environment Variables):
 //   OPENAI_API_KEY   - OpenAI secret key
-//   APP_ACCESS_CODE  - shared code users must enter in the app
+//   APP_USERS        - sign-in users (see lib/session.js)
 // Optional:
 //   OPENAI_MODEL     - model name (default below)
 //   OPENAI_EFFORT    - reasoning effort (default "low")
 //   KV_REST_API_URL, KV_REST_API_TOKEN - Upstash Redis (added by the Vercel integration)
+import { verifyToken, getCookie, COOKIE_NAME } from '../lib/session.js';
 
 const DEFAULT_MODEL = 'gpt-5.5';
 const MAX_CHARS = 12000;
@@ -17,19 +18,17 @@ const WINDOW_MS = 10 * 60 * 1000;
 const MAX_PER_WINDOW = 20;
 const hits = new Map();
 
-function rateLimited(ip) {
+function rateLimited(id) {
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter(t => now - t < WINDOW_MS);
-  if (list.length >= MAX_PER_WINDOW) { hits.set(ip, list); return true; }
+  const list = (hits.get(id) || []).filter(t => now - t < WINDOW_MS);
+  if (list.length >= MAX_PER_WINDOW) { hits.set(id, list); return true; }
   list.push(now);
-  hits.set(ip, list);
+  hits.set(id, list);
   if (hits.size > 5000) hits.clear();
   return false;
 }
 
 // Shared rate limit via Upstash Redis (applies across all instances).
-// Env vars added automatically by the Vercel Upstash integration:
-//   KV_REST_API_URL, KV_REST_API_TOKEN
 // Falls back to the in-memory limit above if Upstash is unreachable.
 const WINDOW_SEC = 600;          // 10 minutes
 const DAILY_CAP = 100;           // total reports per day (UTC), all users
@@ -54,49 +53,41 @@ async function redisPipeline(cmds) {
   } finally { clearTimeout(timer); }
 }
 
-async function checkLimits(ip) {
+async function checkLimits(id) {
   const day = new Date().toISOString().slice(0, 10);
-  const ipKey = 'v2r:ip:' + ip;
+  const idKey = 'v2r:u:' + id;
   const dayKey = 'v2r:day:' + day;
   try {
     const results = await redisPipeline([
-      ['SET', ipKey, '0', 'EX', String(WINDOW_SEC), 'NX'],
-      ['INCR', ipKey],
+      ['SET', idKey, '0', 'EX', String(WINDOW_SEC), 'NX'],
+      ['INCR', idKey],
       ['SET', dayKey, '0', 'EX', '172800', 'NX'],
       ['INCR', dayKey]
     ]);
-    const ipCount = Number(results[1]);
+    const idCount = Number(results[1]);
     const dayCount = Number(results[3]);
     if (dayCount > DAILY_CAP) return 'Daily limit reached. Try again tomorrow.';
-    if (ipCount > MAX_PER_WINDOW) return 'Too many requests. Try again shortly.';
+    if (idCount > MAX_PER_WINDOW) return 'Too many requests. Try again shortly.';
     return null;
   } catch (e) {
     console.error('Rate limit store unavailable', e && e.message);
-    return rateLimited(ip) ? 'Too many requests. Try again shortly.' : null;
+    return rateLimited(id) ? 'Too many requests. Try again shortly.' : null;
   }
-}
-
-function safeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
 }
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const expected = process.env.APP_ACCESS_CODE;
-  if (!expected || !process.env.OPENAI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({ error: 'Formatting service not configured' });
   }
-  if (!safeEqual(String(req.headers['x-access-code'] || ''), expected)) {
-    return res.status(401).json({ error: 'Access code required' });
-  }
 
-  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  const limitMsg = await checkLimits(ip);
+  // Second check behind middleware.js: must be signed in.
+  const user = await verifyToken(getCookie(req.headers.cookie, COOKIE_NAME));
+  if (!user) return res.status(401).json({ error: 'Sign in required' });
+
+  const limitMsg = await checkLimits(user);
   if (limitMsg) return res.status(429).json({ error: limitMsg });
 
   try {
